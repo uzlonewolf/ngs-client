@@ -102,3 +102,11 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+
+# don't include zone's file
+ng/ng_equ.py
+
+# don't include old/backup files
+*.old
+*.old.py
