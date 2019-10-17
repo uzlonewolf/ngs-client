@@ -44,6 +44,8 @@ class ng_player_event:
                 yield k, get_var_name( v, 'PLAYER_EVENT_SCORE_APPLIES_' )
             #elif( k == 'player_team' ):
             #    yield k, get_var_name( v, 'GAME_TEAM_' )
+            elif( k == 'rawdata' ):
+                yield k, str(v)
             else:
                 yield k, v
 
