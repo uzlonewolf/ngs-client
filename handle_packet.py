@@ -29,7 +29,7 @@ def handle_packet( pkt, ourgamedata = None ):
                 ourgamedata.game_length = pkt.data.time_remaining
 
             if( ourgamedata.game_length > 0 ):
-                print 'game progress:', ((pkt.data.time_remaining / ourgamedata.game_length) * 100), '%'
+                print 'game progress:', ((float(pkt.data.time_remaining) / ourgamedata.game_length) * 100), '%'
 
         ourgamedata.last_game_state = pkt.data.mode
 
