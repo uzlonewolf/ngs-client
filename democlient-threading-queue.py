@@ -25,7 +25,7 @@ if __name__ == "__main__":
 
     conn = ng.client.client( '192.168.2.3', 12100, q )
 
-    thread = threading.Thread(target=conn.mainloop)
+    thread = threading.Thread(target=conn.run_forever)
     thread.setDaemon(True)
     thread.start()
 

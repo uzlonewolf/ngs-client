@@ -20,6 +20,21 @@ class client:
         self.stop_tok.set()
         self.close()
 
+    def run_forever( self ):
+        while not self.stop_tok.is_set():
+            try:
+                self.mainloop()
+            except:
+                traceback.print_exc()
+                print 'Main Loop crashed!'
+
+                try:
+                    self.close()
+                except:
+                    pass
+
+                self.sock = None
+
     def mainloop( self ):
         self.connect()
 
@@ -52,6 +67,11 @@ class client:
                 else:
                     print 'tick'
 
+                continue
+            except:
+                traceback.print_exc()
+                print 'Connection dropped!'
+                self.close()
                 continue
 
             if( len(buf) < 1 ):
