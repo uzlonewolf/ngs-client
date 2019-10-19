@@ -97,6 +97,13 @@ ACTION_DIE   = 1
 ACTION_TIMER = 2
 
 
+# not included in the stock ng_equ
+CMD_RADIO_PACK_STATE                = 0x09
+CMD_RADIO_SET_VOLUME                = 0X20
+CMD_RADIO_REBOOT_NOW                = 0x3F
+
+
+
 def get_var_name( val, prefix = None ):
     #for key, value in vars(ng_equ).iteritems():
     for key, value in globals().iteritems():
