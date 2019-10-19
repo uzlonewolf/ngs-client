@@ -10,11 +10,15 @@ class client:
         self.server = server
         self.port = port
         self.msg_action = msg_action
+        self.get_pack_state = False
         self.stop_tok = threading.Event()
         self.timer = 0
         self.last_packet_time = 0
         self.sent_poll = False
         self.ng_pkt = packet.ng_packetizer()
+
+    def want_pack_state( self, want = True ):
+        self.get_pack_state = bool(want)
 
     def stop( self ):
         self.stop_tok.set()
@@ -121,6 +125,9 @@ class client:
         self.send( self.ng_pkt.encode_byte( CMD_TCP_SET_CLIENT_AUTO_SEND, AUTO_SEND_GAME_EVENTS ) )
         self.send( self.ng_pkt.get_gameserver_mode() )
 
+        #if( self.get_pack_state ):
+        self.send( self.ng_pkt.get_all_pack_status() )
+
         if( self.sock is not None ):
             print 'Requested OK.'
 
@@ -156,8 +163,15 @@ class client:
         self.send( self.ng_pkt.get_gameserver_mode() )
         self.sent_poll = True
 
+        if( self.get_pack_state ):
+            self.send( self.ng_pkt.get_all_pack_status() )
+
 
     def handle_packet( self, pkt ):
+        if pkt is None:
+            print 'Packet is None!'
+            return
+
         self.sent_poll = False
         self.last_packet_time = time.time()
 

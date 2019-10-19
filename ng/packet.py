@@ -95,6 +95,31 @@ class ng_server_mode:
             else:
                 yield k, v
 
+class ng_pack_status_pkt:
+    num_packs = 0
+    packs = { }
+
+    def __iter__(self):
+        #yield 'packs', { i : dict(self.packs[i]) for i in range( len(self.packs) ) }
+        for k, v in vars(self).iteritems():
+            if( k == 'packs' ):
+                yield 'packs', { i : dict(self.packs[i]) for i in v }
+            else:
+                yield k, v
+
+class ng_pack_status:
+    team  = 0
+    flags = 0
+    state = 0
+    data  = 0
+
+    def flag( self, flag_to_check ):
+        return ((self.flags & flag_to_check) == flag_to_check)
+
+    def __iter__(self):
+        return vars(self).iteritems()
+
+
 class ng_data:
     typ = None
     byts = 1
@@ -166,15 +191,27 @@ class ng_packetizer:
         return self.packetize( cmd, self.stringize( (i,d) ) )
 
     def encode_byte( self, cmd, data ):
-        d = ng_data()
-        d.data = data
-        return self.packetize( cmd, self.stringize( (d,) ) )
+        return self.encode_bytes( cmd, (data,) )
+
+    def encode_bytes( self, cmd, data ):
+        d = [ ]
+        for i in data:
+            ngd = ng_data()
+            ngd.data = i
+            d.append( ngd )
+        return self.packetize( cmd, self.stringize( d ) )
 
     def set_pack_blocking( self, pack_id, block ):
         return self.encode_idx_bool( CMD_TCP_PACK_BLOCKING, pack_id, block )
 
     def get_gameserver_mode( self ):
         return self.packetize( CMD_TCP_CLIENT_GET_SERVER_MODE, '' )
+
+    def get_all_pack_status( self ):
+        return self.get_pack_status( 0xFF )
+
+    def get_pack_status( self, pack_id ):
+        return self.encode_bytes( CMD_TCP_GET_PACK_STATUS, (PACK_STATUS_REQUEST_TYPE_ALWAYS, pack_id) )
 
 
 
@@ -188,7 +225,7 @@ class ng_packetizer:
         if fmt is None:
             l = len(data)
             if( l == 4 ):
-                fmt = '<i' # signed int
+                fmt = '<i' # i = signed int, I = unsigned int
             elif( l == 2 ):
                 fmt = '<H' # unsigned short int
             else:
@@ -221,7 +258,8 @@ class ng_packetizer:
 
         want_len = self.get_len()
 
-        if( want_len > 512 ):
+        # pack status packets are (num_packs * 5) + 1
+        if( want_len > 1282 ):
             print 'Sanity Check Failed!  Discarding Packet Buffer!  Claimed packet size:', want_len
             self.buf = ''
             return False
@@ -357,8 +395,35 @@ class ng_packetizer:
             pkt.data.mode_data = self.destringize( this_buf[3:] )
 
         elif( pkt.command == CMD_TCP_SERVER_PACK_STATUS ):
-            # FIXME
-            raise NotImplementedError()
+            pkt.is_pack_status = True
+            pkt.data = ng_pack_status_pkt()
+            pkt.data.num_packs = self.destringize( this_buf[0] )
+            pkt.data.packs = { }
+
+            #for i in range( pkt.data.num_packs ):
+            #    pkt.data.packs.append( ng_pack_status( ) )
+
+            this_buf = this_buf[1:]
+            i = 0
+            j = len( this_buf )
+
+            while( i < j ):
+                pack_id = self.destringize( this_buf[i] )
+                pack_flags = self.destringize( this_buf[i+1] )
+                pack_team  = self.destringize( this_buf[i+2] )
+                pack_state = self.destringize( this_buf[i+3] )
+                state_data = self.destringize( this_buf[i+4] )
+                i += 5
+
+                #if( pack_id >= pkt.data.num_packs ):
+                #    print 'Pack ID out of range! pack:', pack_id, 'max pack:', pkt.data.num_packs
+                #    continue
+
+                pkt.data.packs[pack_id] = ng_pack_status( )
+                pkt.data.packs[pack_id].flags = pack_flags
+                pkt.data.packs[pack_id].team  = pack_team
+                pkt.data.packs[pack_id].state = pack_state
+                pkt.data.packs[pack_id].data  = state_data
 
         else:
             # FIXME

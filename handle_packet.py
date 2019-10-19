@@ -34,7 +34,19 @@ def handle_packet( pkt, ourgamedata = None ):
         ourgamedata.last_game_state = pkt.data.mode
 
     elif( pkt.is_pack_status ):
-        print 'FIXME! pack status'
+        print 'game server has', pkt.data.num_packs, 'packs installed'
+
+        for pid in pkt.data.packs:
+            pack = pkt.data.packs[pid]
+            if( pack.flag( TCP_PACK_STATUS_FLAG_BLOCKED ) ):
+                print 'pack', pid, 'is blocked'
+            elif( not pack.flag( TCP_PACK_STATUS_FLAG_ONLINE ) ):
+                print 'pack', pid, 'is ---offline---'
+            elif( pack.state == 2 ): # can use PACK_STATE_CHARGING instead of 2 if ng_equ is included
+                print 'pack', pid, 'is charging, charge current is', pack.data
+            else:
+                print 'pack', pid, 'is pack state', get_var_name( pack.state, 'PACK_STATE_' )
+
     elif( pkt.is_player_event ):
         print 'player event, score:', pkt.data.score, get_var_name( pkt.data.score_applies, 'PLAYER_EVENT_SCORE_APPLIES_' )
 

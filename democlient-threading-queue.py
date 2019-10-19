@@ -24,6 +24,7 @@ if __name__ == "__main__":
     gamedata = handle_packet.gamedata()
 
     conn = ng.client.client( '192.168.2.3', 12100, q )
+    conn.want_pack_state()
 
     thread = threading.Thread(target=conn.run_forever)
     thread.setDaemon(True)

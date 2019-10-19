@@ -14,6 +14,7 @@ if __name__ == "__main__":
     gamedata = handle_packet.gamedata()
 
     conn = ng.client.client( '192.168.2.3', 12100, handle_packet.handle_packet )
+    conn.want_pack_state()
 
     try:
         conn.mainloop() # never exits!
