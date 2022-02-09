@@ -110,3 +110,7 @@ ng/ng_equ.py
 # don't include old/backup files
 *.old
 *.old.py
+*.py~
+
+# or this one
+fake-server.py

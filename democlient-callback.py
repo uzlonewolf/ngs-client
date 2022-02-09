@@ -2,12 +2,14 @@ import os, sys, time, traceback, pprint
 
 from remap_stdout import RemapStdout
 
-from ng.defs import *
 import ng.client
 import handle_packet
 
 def opened( conn ):
     print( 'opened' )
+    #conn.send( conn.ng_pkt.restore_teams() ) # no data, uses teams stored in Setup.ini
+    #conn.send( conn.ng_pkt.set_pack_team( 0, 6 ) )
+    #conn.send( conn.ng_pkt.set_pack_name( 0, 'Astrooo' ) )
 
 def poll( conn ):
     print( 'sending poll' )

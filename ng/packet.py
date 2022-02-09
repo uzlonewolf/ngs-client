@@ -161,7 +161,10 @@ class ng_packetizer:
 
         for d in data:
             if( d.typ is not None ):
-                buf += struct.pack( d.typ, d.data )
+                if( d.typ == 'S' ):
+                    buf += d.data
+                else:
+                    buf += struct.pack( d.typ, d.data )
             elif( d.byts == 0 ): # Bool
                 buf += struct.pack( '<?', d.data )
             elif( d.byts == 2 ): # unsigned short int
@@ -213,6 +216,38 @@ class ng_packetizer:
     def get_pack_status( self, pack_id ):
         return self.encode_bytes( CMD_TCP_GET_PACK_STATUS, (PACK_STATUS_REQUEST_TYPE_ALWAYS, pack_id) )
 
+    def restore_teams( self ):
+        print 'Restoring teams for all packs using teams stored in Setup.ini'
+        return self.packetize( CMD_TCP_RESTORE_TEAMS, '' )
+
+    def set_pack_team( self, pack_id, new_team_id ):
+        if( pack_id < 0 or pack_id > 127 ):
+            raise ValueError( 'Pack ID out of range!' )
+
+        if( new_team_id < 0 or new_team_id > 7 ):
+            raise ValueError( 'Team ID out of range!' )
+
+        return self.encode_bytes( CMD_TCP_PACK_SET_TEAM, (pack_id, new_team_id) )
+
+    def set_pack_name( self, pack_id, new_name ):
+        if( pack_id < 0 or pack_id > 127 ):
+            raise ValueError( 'Pack ID out of range!' )
+
+        if( len(new_name) < 1 or len(new_name) > 16 ):
+            raise ValueError( 'New name must be between 1 and 16 characters!' )
+
+        d = [ ]
+
+        pid = ng_data()
+        pid.data = pack_id
+        d.append( pid )
+
+        ns = ng_data()
+        ns.typ = 'S'
+        ns.data = new_name.ljust( 8 )
+        d.append( ns )
+
+        return self.packetize( CMD_TCP_SET_PACK_NAME, self.stringize( d ) )
 
 
     ######################
