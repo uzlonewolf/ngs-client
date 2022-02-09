@@ -1,21 +1,29 @@
-import threading, time, socket, select, traceback, pprint, Queue
+import threading, time, socket, select, traceback, pprint, Queue, binascii
 
 from defs import *
 import packet
 
 
 class client:
-    def __init__( self, server, port, msg_action = None ):
+    def __init__( self, server, port ):
         self.sock = None
         self.server = server
         self.port = port
-        self.msg_action = msg_action
         self.get_pack_state = False
-        self.stop_tok = threading.Event()
         self.timer = 0
         self.last_packet_time = 0
+        self.next_game_state_time = 0
+        self.next_pack_request_time = 0
         self.sent_poll = False
         self.ng_pkt = packet.ng_packetizer()
+        self.server_state = None
+        self.was_open = False
+
+        self.stop_tok = None
+        self.print_hex = False
+        self.on_message = None
+        self.on_connect = None
+        self.on_close = None
 
     def want_pack_state( self, want = True ):
         self.get_pack_state = bool(want)
@@ -25,9 +33,16 @@ class client:
         self.close()
 
     def run_forever( self ):
+        if self.stop_tok is None:
+            self.stop_tok = threading.Event()
+
         while not self.stop_tok.is_set():
             try:
                 self.mainloop()
+            except (SystemExit, KeyboardInterrupt):
+                print 'run_forever() needs to exit!'
+                self.stop()
+                break
             except:
                 traceback.print_exc()
                 print 'Main Loop crashed!'
@@ -40,6 +55,9 @@ class client:
                 self.sock = None
 
     def mainloop( self ):
+        if self.stop_tok is None:
+            self.stop_tok = threading.Event()
+
         self.connect()
 
         while not self.stop_tok.is_set():
@@ -54,6 +72,11 @@ class client:
                     time.sleep( 5 )
                     continue
 
+            if( self.get_pack_state and (self.next_pack_request_time <= time.time()) ):
+                #self.send( self.ng_pkt.get_all_pack_status() )
+                #self.next_pack_request_time += 30 # the time will get reset when response is received
+                self.send_poll()
+
             want = self.ng_pkt.want_bytes()
 
             while( want == 0 ):
@@ -62,11 +85,18 @@ class client:
 
             try:
                 buf = self.sock.recv( want )
+                if( self.print_hex ):
+                    print 'recv\'d:', binascii.hexlify( buf )
+            except (SystemExit, KeyboardInterrupt):
+                print 'Client thread needs to exit!'
+                self.stop()
+                break
             except socket.timeout:
                 if( (time.time() - self.last_packet_time) > 60 ):
                     print 'Connection dropped!'
                     self.close()
                 elif( (time.time() - self.last_packet_time) > 30 ):
+                    self.next_game_state_time = 0
                     self.send_poll()
                 else:
                     print 'tick'
@@ -96,6 +126,7 @@ class client:
             self.sock.settimeout( 5 )
             self.sock.connect( (self.server, self.port) )
             self.connection_opened()
+            self.sock.settimeout( 1 )
         except:
             traceback.print_exc()
             print 'Connection Failed!'
@@ -118,18 +149,29 @@ class client:
 
         self.timer = time.time() + 10
 
+        if( self.was_open and callable( self.on_close ) ):
+	    print( 'Calling on_close()' )
+            self.on_close( self )
+            self.was_open = False
+
+
     def connection_opened( self ):
         print 'Connection to', self.server, 'opened, requesting event auto-send'
+        self.was_open = True
         self.last_packet_time = time.time()
+        self.next_pack_request_time = time.time() + 10
         self.send( self.ng_pkt.encode_byte( CMD_TCP_SET_CLIENT_AUTO_SEND, AUTO_SEND_SERVER_MODE ) )
         self.send( self.ng_pkt.encode_byte( CMD_TCP_SET_CLIENT_AUTO_SEND, AUTO_SEND_GAME_EVENTS ) )
         self.send( self.ng_pkt.get_gameserver_mode() )
 
-        #if( self.get_pack_state ):
-        self.send( self.ng_pkt.get_all_pack_status() )
+        if( self.get_pack_state ):
+            self.send( self.ng_pkt.get_all_pack_status() )
 
         if( self.sock is not None ):
             print 'Requested OK.'
+            if( callable( self.on_connect ) ):
+                print( 'Calling on_connect()' )
+                self.on_connect( self )
 
     def send( self, data ):
         self.sent_poll = False
@@ -139,7 +181,10 @@ class client:
             return
 
         tosend = len(data)
-        print 'sending', tosend, 'bytes to the server'
+        if( self.print_hex ):
+            print 'sending', tosend, 'bytes to the server:', binascii.hexlify( data )
+        else:
+            print 'sending', tosend, 'bytes to the server'
 
         while( tosend > 0 ):
             try:
@@ -156,16 +201,20 @@ class client:
             tosend -= sent
 
     def send_poll( self ):
-        if( self.sent_poll ):
-            return
+        #if( self.sent_poll ):
+        #    return
 
-        print 'Polling for server mode'
-        self.send( self.ng_pkt.get_gameserver_mode() )
-        self.sent_poll = True
+        if( self.next_game_state_time <= time.time() ):
+            print 'Polling for server mode'
+            self.send( self.ng_pkt.get_gameserver_mode() )
+            self.next_game_state_time = time.time() + 5
+            self.on_poll( self )
 
         if( self.get_pack_state ):
             self.send( self.ng_pkt.get_all_pack_status() )
+            self.next_pack_request_time = time.time() + 35
 
+        self.sent_poll = True
 
     def handle_packet( self, pkt ):
         if pkt is None:
@@ -175,17 +224,26 @@ class client:
         self.sent_poll = False
         self.last_packet_time = time.time()
 
-        if( self.msg_action is None ):
+        if( pkt.is_server_mode ):
+            self.server_state = pkt.data
+            self.next_game_state_time = time.time() + 5
+        elif( pkt.is_pack_status ):
+            if( self.server_state and self.server_state.mode == SERVER_MODE_RUNNING ):
+                self.next_pack_request_time = time.time() + 1
+            else:
+                self.next_pack_request_time = time.time() + 6
+
+        if( self.on_message is None ):
             print 'Got Packet:'
             pprint.pprint( pkt )
 
-        elif( isinstance(self.msg_action, Queue.Queue) ):
+        elif( isinstance(self.on_message, Queue.Queue) ):
             try:
-                self.msg_action.put( pkt, True, 1 )
+                self.on_message.put( pkt, True, 1 )
             except:
                 traceback.print_exc()
-        elif( callable( self.msg_action ) ):
-            self.msg_action( pkt )
+        elif( callable( self.on_message ) ):
+            self.on_message( pkt )
         else:
-            print 'Invalid packet handler!', self.msg_action
+            print 'Invalid packet handler!', self.on_message
 
